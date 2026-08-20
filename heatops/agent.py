@@ -17,22 +17,19 @@ Two LLM backends:
 from __future__ import annotations
 
 import json
-import os
 import re
 from datetime import date
 
 import httpx
-from dotenv import load_dotenv
 
+from . import config
 from .fg_client import FortyGuardClient
 from .tools import TOOLS, ToolRunner
 
-load_dotenv()
-
-LLM_BASE_URL = os.getenv("HEATOPS_LLM_BASE_URL", "").rstrip("/")
-LLM_API_KEY = os.getenv("HEATOPS_LLM_API_KEY", "")
-LLM_VERIFY_TLS = os.getenv("HEATOPS_LLM_VERIFY_TLS", "true").lower() != "false"
-MODEL = os.getenv(
+LLM_BASE_URL = config.get("HEATOPS_LLM_BASE_URL").rstrip("/")
+LLM_API_KEY = config.get("HEATOPS_LLM_API_KEY")
+LLM_VERIFY_TLS = config.get("HEATOPS_LLM_VERIFY_TLS", "true").lower() != "false"
+MODEL = config.get(
     "HEATOPS_MODEL", "qwen3.6-35b-a3b" if LLM_BASE_URL else "claude-sonnet-4-6"
 )
 MAX_STEPS = 12
@@ -130,7 +127,9 @@ class HeatOpsAgent:
         else:
             import anthropic
 
-            self.llm = anthropic.Anthropic()  # ANTHROPIC_API_KEY from env
+            self.llm = anthropic.Anthropic(
+                api_key=config.get("ANTHROPIC_API_KEY") or None
+            )
             self.http = None
 
     def run(self, brief: str, on_event=print, on_token=None) -> str:

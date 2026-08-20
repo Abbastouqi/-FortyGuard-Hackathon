@@ -58,6 +58,25 @@ statistics (overall min/max/mean/σ plus the hottest and coolest tiles with
 centroids) before being fed back to the model, so any 32k-context model can
 reason over city-scale analyses.
 
+### Deploy on Streamlit Community Cloud
+
+1. Push this repo to GitHub and create the app at share.streamlit.io
+   (branch `main`, main file `app.py`).
+2. In the app's **Settings → Secrets**, add your keys in TOML form —
+   never commit them to the repo:
+
+   ```toml
+   FORTYGUARD_API_KEY = "..."
+   ANTHROPIC_API_KEY = "sk-ant-..."   # or the HEATOPS_LLM_* trio instead
+   ```
+
+   Configuration is read from environment variables first and falls back
+   to `st.secrets` (see `heatops/config.py`), so the same code runs
+   locally with `.env` and on the cloud with Secrets. Note that an
+   OpenAI-compatible gateway used in the cloud must be publicly
+   reachable — private/campus-network hosts won't work from Streamlit's
+   servers.
+
 ## Notes for judges
 
 - Failed FortyGuard tasks cost nothing; the client logs `activity_id` on every call for debugging and audit.

@@ -11,18 +11,16 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import time
 from pathlib import Path
 from typing import Any
 
 import httpx
-from dotenv import load_dotenv
 
-load_dotenv()
+from . import config
 
 BASE_URL = "https://api.fortyguard.com"
-CACHE_DIR = Path(os.getenv("HEATOPS_CACHE_DIR", ".fg_cache"))
+CACHE_DIR = Path(config.get("HEATOPS_CACHE_DIR", ".fg_cache"))
 # Bounded polling with backoff: 3s -> 6s -> 12s, then steady 12s.
 # Docs' own example allows ~10 minutes total; we cap around 8 minutes.
 POLL_SCHEDULE = [3, 6] + [12] * 38  # ~7.7 min total
@@ -38,7 +36,7 @@ class FortyGuardError(RuntimeError):
 
 class FortyGuardClient:
     def __init__(self, api_key: str | None = None, cache: bool = True):
-        self.api_key = api_key or os.getenv("FORTYGUARD_API_KEY", "")
+        self.api_key = api_key or config.get("FORTYGUARD_API_KEY")
         if not self.api_key:
             raise FortyGuardError(
                 "No API key. Set FORTYGUARD_API_KEY in your .env file."
