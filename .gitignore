@@ -1,0 +1,4 @@
+.env
+.fg_cache/
+__pycache__/
+venv/
