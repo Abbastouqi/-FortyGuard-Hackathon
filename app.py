@@ -47,17 +47,23 @@ if brief:
     st.chat_message("user").markdown(brief)
 
     events: list[str] = []
-    log_box = st.chat_message("assistant").empty()
+    assistant = st.chat_message("assistant")
+    log_box = assistant.empty()
+    stream_box = assistant.empty()
 
     def on_event(msg: str) -> None:
         events.append(msg)
         log_box.markdown("```\n" + "\n".join(events[-12:]) + "\n```")
+        stream_box.empty()  # a new step started — clear the partial text
+
+    def on_token(text: str) -> None:
+        stream_box.markdown(text + " ▌")
 
     agent = HeatOpsAgent()
     with st.spinner("Agent planning and calling FortyGuard…"):
-        answer = agent.run(brief, on_event=on_event)
+        answer = agent.run(brief, on_event=on_event, on_token=on_token)
 
-    log_box.markdown(answer)
+    stream_box.markdown(answer)
     st.session_state.history.append(("assistant", answer))
 
     with st.expander("🔍 Audit trail (API calls made)"):

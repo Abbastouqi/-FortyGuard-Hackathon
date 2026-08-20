@@ -133,35 +133,62 @@ class HeatOpsAgent:
             self.llm = anthropic.Anthropic()  # ANTHROPIC_API_KEY from env
             self.http = None
 
-    def run(self, brief: str, on_event=print) -> str:
+    def run(self, brief: str, on_event=print, on_token=None) -> str:
         if LLM_BASE_URL:
-            return self._run_openai_compat(brief, on_event)
+            return self._run_openai_compat(brief, on_event, on_token)
         return self._run_anthropic(brief, on_event)
 
     # -- OpenAI-compatible backend (prompt-based tool calling) --------------
 
-    def _chat(self, messages: list[dict]) -> tuple[str, str]:
-        resp = self.http.post(
-            "/chat/completions",
-            json={"model": MODEL, "messages": messages, "max_tokens": 12000},
-        )
-        resp.raise_for_status()
-        choice = resp.json()["choices"][0]
-        content = choice["message"]["content"] or ""
-        content = _THINK_RE.sub("", content)
-        # An unterminated <think> means generation was cut inside the
-        # reasoning block — drop the partial reasoning entirely.
-        if "<think>" in content:
-            content = content.split("<think>")[0]
-        return content.strip(), choice.get("finish_reason") or "stop"
+    @staticmethod
+    def _visible(raw: str) -> str:
+        """Strip completed and unterminated <think> blocks."""
+        text = _THINK_RE.sub("", raw)
+        if "<think>" in text:
+            text = text.split("<think>")[0]
+        return text.strip()
 
-    def _run_openai_compat(self, brief: str, on_event=print) -> str:
+    def _chat(self, messages: list[dict], on_token=None) -> tuple[str, str]:
+        """Stream a completion (keeps slow gateways from idling out the
+        connection); returns (visible_text, finish_reason)."""
+        raw, finish = "", "stop"
+        with self.http.stream(
+            "POST",
+            "/chat/completions",
+            json={
+                "model": MODEL,
+                "messages": messages,
+                "max_tokens": 12000,
+                "stream": True,
+            },
+        ) as resp:
+            resp.raise_for_status()
+            for line in resp.iter_lines():
+                if not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+                choice = (chunk.get("choices") or [{}])[0]
+                raw += choice.get("delta", {}).get("content") or ""
+                finish = choice.get("finish_reason") or finish
+                if on_token:
+                    visible = self._visible(raw)
+                    if visible:
+                        on_token(visible)
+        return self._visible(raw), finish
+
+    def _run_openai_compat(self, brief: str, on_event=print, on_token=None) -> str:
         messages = [
             {"role": "system", "content": SYSTEM + _tools_prompt()},
             {"role": "user", "content": brief},
         ]
         for step in range(MAX_STEPS):
-            content, finish = self._chat(messages)
+            content, finish = self._chat(messages, on_token)
             messages.append({"role": "assistant", "content": content})
 
             call = _parse_tool_call(content)
